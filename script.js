@@ -13,6 +13,7 @@
   let users = [...INITIAL_NIPS];
   let selectedDate = null;
   let selectedAnnotation = null;
+  let generalPassword = "2026";
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -26,7 +27,7 @@
 
     if (!isSupabaseConfigured()) {
       els.configWarning.classList.remove("hidden");
-      setLoginMessage("Configura Supabase antes de usar la V2 compartida.", true);
+      setLoginMessage("Configura Supabase antes de usar la V2.1 compartida.", true);
       return;
     }
 
@@ -114,13 +115,25 @@
   }
 
   async function loadPublicUsers() {
+    if (!supabaseClient) return;
     try {
-      const { data, error } = await supabaseClient.rpc("upo4_active_nips");
+      const { data: settingsData } = await supabaseClient
+        .from("upo4_settings")
+        .select("general_password")
+        .eq("id", 1)
+        .single();
+      if (settingsData?.general_password) generalPassword = String(settingsData.general_password);
+
+      const { data, error } = await supabaseClient
+        .from("upo4_users")
+        .select("nip")
+        .eq("active", true)
+        .order("nip", { ascending: true });
       if (error) throw error;
       if (data?.length) populateNipSelects(data.map(row => row.nip));
     } catch (err) {
       console.error(err);
-      setLoginMessage("No se pudieron cargar los NIP desde Supabase. Revisa que hayas ejecutado el SQL.", true);
+      setLoginMessage("No se pudieron cargar los NIP. Revisa que hayas pegado el SQL simple en Supabase.", true);
     }
   }
 
@@ -136,32 +149,39 @@
       return;
     }
 
-    setLoginMessage("Comprobando acceso...");
-    const { data, error } = await supabaseClient.rpc("upo4_login", { p_nip: nip, p_password: password });
-    if (error) {
-      console.error(error);
-      setLoginMessage("Acceso denegado o error de conexión.", true);
-      return;
-    }
-    if (!data || data.length === 0) {
-      setLoginMessage("Contraseña incorrecta.", true);
-      return;
-    }
+    try {
+      setLoginMessage("Comprobando acceso...");
+      const { data: user, error } = await supabaseClient
+        .from("upo4_users")
+        .select("nip, password, is_admin, active")
+        .eq("nip", nip)
+        .eq("active", true)
+        .single();
+      if (error || !user) throw error || new Error("Usuario no encontrado");
 
-    session = {
-      token: data[0].token,
-      nip: String(data[0].nip),
-      is_admin: Boolean(data[0].is_admin)
-    };
-    els.passwordInput.value = "";
-    els.loginView.classList.add("hidden");
-    els.appView.classList.remove("hidden");
-    els.sessionInfo.textContent = `NIP ${session.nip}${session.is_admin ? " · Administrador" : ""}`;
-    els.adminPanel.classList.toggle("hidden", !session.is_admin);
-    els.transferPanel.classList.toggle("hidden", !session.is_admin);
-    populateTargetNipSelect();
-    await loadPublicUsers();
-    await loadAnnotations();
+      const expectedPassword = user.password ? String(user.password) : generalPassword;
+      if (password !== expectedPassword) {
+        setLoginMessage("Contraseña incorrecta.", true);
+        return;
+      }
+
+      session = {
+        nip: String(user.nip),
+        is_admin: Boolean(user.is_admin)
+      };
+      els.passwordInput.value = "";
+      els.loginView.classList.add("hidden");
+      els.appView.classList.remove("hidden");
+      els.sessionInfo.textContent = `NIP ${session.nip}${session.is_admin ? " · Administrador" : ""}`;
+      els.adminPanel.classList.toggle("hidden", !session.is_admin);
+      els.transferPanel.classList.toggle("hidden", !session.is_admin);
+      populateTargetNipSelect();
+      await loadPublicUsers();
+      await loadAnnotations();
+    } catch (err) {
+      console.error(err);
+      setLoginMessage("Acceso denegado o error de conexión.", true);
+    }
   }
 
   function logout() {
@@ -179,12 +199,16 @@
     if (!session) return;
     els.yearSelect.value = currentYear;
     els.monthSelect.value = currentMonth;
+    const firstDay = toDateString(currentYear, currentMonth, 1);
+    const lastDay = toDateString(currentYear, currentMonth, new Date(Date.UTC(currentYear, currentMonth, 0)).getUTCDate());
     try {
-      const { data, error } = await supabaseClient.rpc("upo4_get_annotations", {
-        p_token: session.token,
-        p_year: currentYear,
-        p_month: currentMonth
-      });
+      const { data, error } = await supabaseClient
+        .from("upo4_annotations")
+        .select("*")
+        .gte("fecha", firstDay)
+        .lte("fecha", lastDay)
+        .order("fecha", { ascending: true })
+        .order("nip", { ascending: true });
       if (error) throw error;
       annotations = (data || []).map(row => ({ ...row, nip: String(row.nip) }));
       renderCalendar();
@@ -299,6 +323,8 @@
     const targetNip = els.targetNipSelect.value;
     const tipo = els.typeSelect.value;
     if (!VALID_TYPES.includes(tipo)) return setModalMessage("Concepto no válido.", true);
+    if (!session?.is_admin && String(targetNip) !== session?.nip) return setModalMessage("Solo puedes modificar tus propias incidencias.", true);
+
     const horaInicio = tipo === "FH" ? els.fromTimeInput.value : null;
     const horaFin = tipo === "FH" ? els.toTimeInput.value : null;
     const nipCambio = tipo === "C" ? els.changeNipInput.value.trim() : null;
@@ -306,33 +332,39 @@
     if (tipo === "C" && !nipCambio) return setModalMessage("Indica el NIP del compañero para el cambio.", true);
 
     try {
-      const { error } = await supabaseClient.rpc("upo4_save_annotation", {
-        p_token: session.token,
-        p_fecha: selectedDate,
-        p_nip: targetNip,
-        p_tipo: tipo,
-        p_hora_inicio: horaInicio,
-        p_hora_fin: horaFin,
-        p_nip_cambio: nipCambio
-      });
+      const payload = {
+        fecha: selectedDate,
+        nip: String(targetNip),
+        tipo,
+        hora_inicio: horaInicio,
+        hora_fin: horaFin,
+        nip_cambio: nipCambio,
+        actualizado_por: session.nip,
+        updated_at: new Date().toISOString()
+      };
+      if (!selectedAnnotation) payload.creado_por = session.nip;
+
+      const { error } = await supabaseClient
+        .from("upo4_annotations")
+        .upsert(payload, { onConflict: "fecha,nip" });
       if (error) throw error;
-      setModalMessage("Guardado.");
       await loadAnnotations();
       openDay(selectedDate);
     } catch (err) {
       console.error(err);
-      setModalMessage("No se ha podido guardar. Comprueba permisos o conexión.", true);
+      setModalMessage("No se ha podido guardar. Comprueba conexión o configuración.", true);
     }
   }
 
   async function deleteSelectedAnnotation() {
     if (!selectedAnnotation) return;
+    if (!session?.is_admin && String(selectedAnnotation.nip) !== session?.nip) return;
     if (!confirm("¿Borrar esta incidencia?")) return;
     try {
-      const { error } = await supabaseClient.rpc("upo4_delete_annotation", {
-        p_token: session.token,
-        p_annotation_id: selectedAnnotation.id
-      });
+      const { error } = await supabaseClient
+        .from("upo4_annotations")
+        .delete()
+        .eq("id", selectedAnnotation.id);
       if (error) throw error;
       await loadAnnotations();
       openDay(selectedDate);
@@ -343,15 +375,21 @@
   }
 
   async function createUser() {
+    if (!session?.is_admin) return;
     const newNip = els.newNipInput.value.trim();
-    const password = els.newNipPasswordInput.value.trim() || null;
+    const password = els.newNipPasswordInput.value.trim();
     if (!newNip) return setAdminMessage("Introduce un NIP.", true);
     try {
-      const { error } = await supabaseClient.rpc("upo4_admin_create_user", {
-        p_token: session.token,
-        p_nip: newNip,
-        p_password: password
-      });
+      const payload = {
+        nip: newNip,
+        password: password || null,
+        is_admin: false,
+        active: true,
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabaseClient
+        .from("upo4_users")
+        .upsert(payload, { onConflict: "nip" });
       if (error) throw error;
       els.newNipInput.value = "";
       els.newNipPasswordInput.value = "";
@@ -364,15 +402,16 @@
   }
 
   async function changeGeneralPassword() {
+    if (!session?.is_admin) return;
     const password = els.generalPasswordInput.value.trim();
     if (!password) return setAdminMessage("Introduce la nueva contraseña general.", true);
     if (!confirm("¿Cambiar la contraseña general para usuarios sin contraseña específica?")) return;
     try {
-      const { error } = await supabaseClient.rpc("upo4_admin_change_general_password", {
-        p_token: session.token,
-        p_new_password: password
-      });
+      const { error } = await supabaseClient
+        .from("upo4_settings")
+        .upsert({ id: 1, general_password: password, updated_at: new Date().toISOString() }, { onConflict: "id" });
       if (error) throw error;
+      generalPassword = password;
       els.generalPasswordInput.value = "";
       setAdminMessage("Contraseña general actualizada.");
     } catch (err) {
@@ -399,6 +438,7 @@
   }
 
   async function importJson(event) {
+    if (!session?.is_admin) return;
     const file = event.target.files?.[0];
     if (!file) return;
     if (!confirm("Se importarán las incidencias del JSON. Si coinciden fecha y NIP, se actualizarán.")) return;
@@ -407,16 +447,22 @@
       const parsed = JSON.parse(text);
       const rows = Array.isArray(parsed) ? parsed : parsed.annotations;
       if (!Array.isArray(rows)) throw new Error("Formato inválido");
-      for (const row of rows) {
-        await supabaseClient.rpc("upo4_save_annotation", {
-          p_token: session.token,
-          p_fecha: row.fecha,
-          p_nip: String(row.nip),
-          p_tipo: row.tipo,
-          p_hora_inicio: row.hora_inicio || null,
-          p_hora_fin: row.hora_fin || null,
-          p_nip_cambio: row.nip_cambio || null
-        });
+      const payload = rows.map(row => ({
+        fecha: row.fecha,
+        nip: String(row.nip),
+        tipo: row.tipo,
+        hora_inicio: row.hora_inicio || null,
+        hora_fin: row.hora_fin || null,
+        nip_cambio: row.nip_cambio || null,
+        creado_por: row.creado_por || session.nip,
+        actualizado_por: session.nip,
+        updated_at: new Date().toISOString()
+      })).filter(row => row.fecha && row.nip && VALID_TYPES.includes(row.tipo));
+      if (payload.length) {
+        const { error } = await supabaseClient
+          .from("upo4_annotations")
+          .upsert(payload, { onConflict: "fecha,nip" });
+        if (error) throw error;
       }
       await loadAnnotations();
       alert("Importación completada.");
@@ -429,13 +475,16 @@
   }
 
   async function deleteMonth() {
+    if (!session?.is_admin) return;
     if (!confirm(`¿Borrar TODAS las incidencias de ${MONTHS[currentMonth - 1]} ${currentYear}?`)) return;
+    const firstDay = toDateString(currentYear, currentMonth, 1);
+    const lastDay = toDateString(currentYear, currentMonth, new Date(Date.UTC(currentYear, currentMonth, 0)).getUTCDate());
     try {
-      const { error } = await supabaseClient.rpc("upo4_admin_delete_month", {
-        p_token: session.token,
-        p_year: currentYear,
-        p_month: currentMonth
-      });
+      const { error } = await supabaseClient
+        .from("upo4_annotations")
+        .delete()
+        .gte("fecha", firstDay)
+        .lte("fecha", lastDay);
       if (error) throw error;
       await loadAnnotations();
       alert("Datos del mes borrados.");
