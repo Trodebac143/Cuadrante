@@ -246,9 +246,9 @@
       else if (dayAnnotations.length) cell.classList.add("incidencia");
       else cell.classList.add("trabajo");
 
-      const label = isFree ? "LIB" : getMonthShift(currentYear, currentMonth);
+      const shiftHtml = isFree ? "" : `<span class="shift-label">${getMonthShift(currentYear, currentMonth)}</span>`;
       cell.innerHTML = `
-        <div class="day-top"><span>${day}</span><span class="shift-label">${label}</span></div>
+        <div class="day-top"><span class="day-number">${day}</span>${shiftHtml}</div>
         <div class="annotations">
           ${dayAnnotations.map(formatAnnotationHtml).join("")}
         </div>

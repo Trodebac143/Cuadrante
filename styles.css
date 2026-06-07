@@ -18,7 +18,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -33,7 +33,7 @@ body {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   padding: 16px;
   margin-bottom: 12px;
@@ -159,7 +159,7 @@ button, .file-btn {
 .weekdays, .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .weekdays span {
@@ -170,13 +170,14 @@ button, .file-btn {
 }
 
 .day-cell {
-  min-height: 112px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 8px;
+  min-height: 118px;
+  border: 1px solid #cfd7e2;
+  border-radius: 5px;
+  padding: 6px;
   background: #fff;
   cursor: pointer;
   overflow: hidden;
+  text-align: left;
 }
 
 .day-cell.empty { background: transparent; border: 0; cursor: default; }
@@ -188,23 +189,36 @@ button, .file-btn {
 .day-top {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-weight: 900;
-  margin-bottom: 4px;
+  align-items: flex-start;
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: #183153;
+}
+
+.day-number {
+  font-size: 1.02rem;
+  line-height: 1;
 }
 
 .shift-label {
-  font-size: .95rem;
-  background: rgba(255,255,255,.55);
-  padding: 2px 7px;
-  border-radius: 999px;
+  font-size: .92rem;
+  line-height: 1;
+  font-weight: 800;
+  color: #183153;
+}
+
+.annotations {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .annotation-line {
-  font-size: .88rem;
-  line-height: 1.15rem;
-  margin-top: 3px;
+  font-size: .78rem;
+  line-height: 1.05rem;
   font-weight: 700;
+  color: #1e2c3f;
+  word-break: break-word;
 }
 
 .admin-grid {
@@ -298,8 +312,11 @@ button, .file-btn {
   .date-selectors { display: grid; grid-template-columns: 1fr 1fr; }
   .calendar-wrapper { padding: 8px; }
   .weekdays, .calendar-grid { gap: 4px; }
-  .day-cell { min-height: 92px; padding: 6px; border-radius: 10px; }
-  .annotation-line { font-size: .76rem; line-height: 1rem; }
+  .weekdays span { font-size: 1.25rem; }
+  .day-cell { min-height: 108px; padding: 6px 5px; border-radius: 4px; }
+  .day-number { font-size: 1rem; }
+  .shift-label { font-size: .88rem; }
+  .annotation-line { font-size: .72rem; line-height: .95rem; }
   .admin-grid { grid-template-columns: 1fr; }
   .transfer-actions { flex-direction: column; }
   .transfer-actions button, .transfer-actions .file-btn { width: 100%; }
