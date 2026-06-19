@@ -1,7 +1,8 @@
 (() => {
   const INITIAL_NIPS = ["56", "114", "221", "101", "143", "215", "145", "146", "193", "214", "223", "41", "190", "151"];
   const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const VALID_TYPES = ["V", "VA", "AP", "APA", "Lc", "FH", "C"];
+  const VALID_TYPES = ["V", "VA", "AP", "APA", "Lc", "FH", "VM", "J", "C"];
+  const TIME_REQUIRED_TYPES = ["FH", "VM", "J"];
   const FREE_BLOCK_START = new Date(Date.UTC(2026, 5, 4)); // 04/06/2026: jueves libre
 
   const els = {};
@@ -304,7 +305,7 @@
 
   function updateConditionalFields() {
     const type = els.typeSelect.value;
-    els.fhFields.classList.toggle("hidden", type !== "FH");
+    els.fhFields.classList.toggle("hidden", !TIME_REQUIRED_TYPES.includes(type));
     els.changeFields.classList.toggle("hidden", type !== "C");
     els.vacationFields.classList.toggle("hidden", type !== "V");
     if (type === "V") {
@@ -319,10 +320,11 @@
     if (!VALID_TYPES.includes(tipo)) return setModalMessage("Concepto no válido.", true);
     if (!session?.is_admin && String(targetNip) !== session?.nip) return setModalMessage("Solo puedes modificar tus propias incidencias.", true);
 
-    const horaInicio = tipo === "FH" ? els.fromTimeInput.value : null;
-    const horaFin = tipo === "FH" ? els.toTimeInput.value : null;
+    const requiresTime = TIME_REQUIRED_TYPES.includes(tipo);
+    const horaInicio = requiresTime ? els.fromTimeInput.value : null;
+    const horaFin = requiresTime ? els.toTimeInput.value : null;
     const nipCambio = tipo === "C" ? els.changeNipInput.value.trim() : null;
-    if (tipo === "FH" && (!horaInicio || !horaFin)) return setModalMessage("Indica hora de inicio y fin para FH.", true);
+    if (requiresTime && (!horaInicio || !horaFin)) return setModalMessage(`Indica hora de inicio y fin para ${tipo}.`, true);
     if (tipo === "C" && !nipCambio) return setModalMessage("Indica el NIP del compañero para el cambio.", true);
 
     try {
@@ -558,13 +560,13 @@
   }
 
   function formatCalendarAnnotationText(a) {
-    if (a.tipo === "FH") return `${a.nip} FH`;
+    if (TIME_REQUIRED_TYPES.includes(a.tipo)) return `${a.nip} ${a.tipo}`;
     if (a.tipo === "C") return `${a.nip} C ${a.nip_cambio || ""}`.trim();
     return `${a.nip} ${a.tipo}`;
   }
 
   function formatAnnotationText(a) {
-    if (a.tipo === "FH") return `${a.nip} FH ${a.hora_inicio || ""} a ${a.hora_fin || ""}`.trim();
+    if (TIME_REQUIRED_TYPES.includes(a.tipo)) return `${a.nip} ${a.tipo} ${a.hora_inicio || ""} a ${a.hora_fin || ""}`.trim();
     if (a.tipo === "C") return `${a.nip} C ${a.nip_cambio || ""}`.trim();
     return `${a.nip} ${a.tipo}`;
   }
