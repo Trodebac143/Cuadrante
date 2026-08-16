@@ -8,8 +8,9 @@
   const els = {};
   let supabaseClient = null;
   let session = null;
-  let currentYear = 2026;
-  let currentMonth = 6;
+  const today = new Date();
+  let currentYear = today.getFullYear();
+  let currentMonth = today.getMonth() + 1;
   let annotations = [];
   let users = [...INITIAL_NIPS];
   let selectedDate = null;
