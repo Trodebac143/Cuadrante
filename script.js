@@ -16,7 +16,11 @@
   let selectedDate = null;
   let selectedAnnotation = null;
 
-  document.addEventListener("DOMContentLoaded", init);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 
   function init() {
     bindElements();
